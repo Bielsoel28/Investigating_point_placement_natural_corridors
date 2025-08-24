@@ -13,7 +13,7 @@ Activate the following packages:
 
 List of nescessary packages:
 
-packages <- c("raster","leastcostpath","terra", "sf", "ggplot2","dplyr", "spatstat", "stars","corrplot","tidyr")
+packages <- c("raster","leastcostpath","terra", "sf", "ggplot2","dplyr", "spatstat", "stars","tidyr")
 
 for (package in packages) { install.packages(package, character.only = TRUE) }
 
