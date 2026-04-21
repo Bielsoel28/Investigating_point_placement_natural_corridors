@@ -1,183 +1,47 @@
-#################################################################################### 
-###################### Main and functions for: ##################################### 
-### Investigating the influence of point placement strategies in the stability of ## 
-### modeled movement corridors: The case of the middle neolithic in the North-East #
-### of the Iberian Peninsula. ######################################################
-#### Biel Soriano-Elias, Anna Bach G?mez, Miquel Molist Montany? ###################
-####################################################################################
+##########################################################################
+# This script is Main for Investigating the influence of point placement # 
+# strategies in the stability of modeled movement corridors:             #   
+# The case of the middle neolithic in the North-East                     #                                                   
+# Biel Soriano-Elias, Anna Bach G?mez, Miquel Molist Montany?            #                                                   
+#                                                                        #                                                   
+# Author: Biel Soriano Elias                                             #
+# Affiliation : Autonomous University of Barcelona                       #
+# Creation date : 8/1/2026                                               #
+# E-mail: biel.soriano@uab.cat                                           #
+##########################################################################
 
+# 0 Environment setup ##########################################################
 
-# set_wd() in the desired folder
+# 0.1 Prepare environment ======================================================
+
+# Set Working directory
 setwd("XXXXX/XXXXX/XXXXX")
 
-# Setting up necessary packages
+# Clean up workspace
+rm(list=ls())
+
+# 0.2 Install packages =========================================================
+
+# Needed packages
 packages <- c("raster","leastcostpath","terra", "sf", "ggplot2","dplyr", "spatstat", "stars","corrplot","tidyr")
 
+#Optional, Run this if the pacakges are not already installed
+for (package in packages) {
+  install.packages(package, character.only = TRUE)
+}
+
+#Load the packages
 for (package in packages) {
   library(package, character.only = TRUE)
 }
 
-### Functions needed ###
+# 0.3 Show session infos =======================================================
 
-Edge_model <- function(y,q,w,dir) { 
-  
-  #Creating the folder to store the shapes of the models
-  dir.create(dir)
-  
-  #Loading of the input DEM or "y"
-  elevacio <- y #raster for points
-  res_rast <- ext(elevacio)
-  
-  #Creation of the limit edge points
-  
-  #Creation of the raster's polygon
-  ext_red <- c(res_rast[1]+1,res_rast[2]-1,res_rast[3]+1,res_rast[4]-1)
-  elevacio_pol <- crop(elevacio, ext_red)
-  pol_ras <- st_union(st_as_sf(as.polygons(elevacio_pol, dissolve = TRUE)))
-  
-  #Converting raster's polygon to edge points
-  mpol_ras <- st_cast(pol_ras, to = "POLYGON") #multipolygon to polygon 
-  pol_line <- st_cast(mpol_ras, to = "LINESTRING") #polygon to line 
-  densitat <- 1 / q #calculation of point density depending on q
-  p_ras <- st_line_sample(pol_line, density = densitat) #line to points depending of density of q
-  punts_loop <- p_ras[[1]] #loading and division of edge points for loop functionality
-  punts_loop <- st_sf(geometry = st_sfc(punts_loop)) #conversion of array to sf
-  punts_loop <- st_cast(punts_loop, "POINT")
-  
-  #Application of the cost function (creation of the cost surface layer from package "leastcostpath")
-  mde_base <- create_slope_cs(elevacio, cost_function = w, neighbours = 16, exaggeration = FALSE) #cost calculation
-  
-  print("Step 1 completed") 
-  
-  
-  #Computation of LCPs for natural corridors
-  
-  #Creation of empty object to store LCPs
-  xarxa_camins_total <- st_sfc(st_linestring(), crs = crs(elevacio)) #creation of line string sfc object
-  xarxa_camins_total <- st_sf(geometry = xarxa_camins_total) #creation of line string sf object
-  xarxa_camins_total <- xarxa_camins_total[-1, ] #emptying of the line string sf object
-  
-  #Creation of LCPs 
-  
-  #Loop for LCP calculation
-  for (i in 1:nrow(punts_loop)) {
-    
-    #Recovery of coordinates of origin point
-    punt_objectiu <- punts_loop[i, ]
-    
-    #Recovery of the destination point
-    punts_desti <- punts_loop[-i, ]
-    
-    #LCPs calculation 
-    xarxa_camins <- create_lcp(mde_base, punt_objectiu, punts_desti, cost_distance = FALSE) #lcps calcultaion
-    xarxa_camins <- st_set_crs(xarxa_camins,crs(elevacio)) #seting crs
-    
-    #Sumation of all LCPs without attributes
-    xarxa_camins_total <- rbind(xarxa_camins_total, xarxa_camins[ , -c(1,2,3,4)])
-    
-    rm(xarxa_camins) #saving memory
-    
-  }
-  
-  print("Step 2 completed") 
-  
-  #Saving of the LCPs to Shapefile
-  nom_arxiu <- paste(substitute(y),as.character(q),substitute(w),"xarxa_camins_total.gpkg") #File name creation
-  xarxa_camins_total <- xarxa_camins_total[!st_is_empty(xarxa_camins_total), ] #filter of empty geometries
-  st_write(xarxa_camins_total, dsn = file.path(dir,nom_arxiu)) #Saving of LCPs object from sf object to GPKG
-  
-  print("Process ended succesfully")
-}
-Edge_rotate_model <- function(y,q,q2,w,dir) { 
-  
-  #Creating the folder to store the shapes of the models
-  dir.create(dir)
-  
-  #Loading of the input DEM or "y" 
-  elevacio <- y
-  res_rast <- ext(elevacio)
-  
-  #Creation of the limit edge points
-  
-  #Creation of the raster's polygon
-  ext_red <- c(res_rast[1]+1,res_rast[2]-1,res_rast[3]+1,res_rast[4]-1)
-  elevacio_pol <- crop(elevacio, ext_red)
-  pol_ras <- st_union(st_as_sf(as.polygons(elevacio_pol, dissolve = TRUE)))
-  
-  #Converting raster's polygon to edge points
-  pol_line <- st_cast(pol_ras, to = "LINESTRING") #polygon to line 
-  densitat <- 1 / q2 #calculation of point density depending on q2
-  p_ras <- st_line_sample(pol_line, density = densitat) #line to points depending of density of q
-  punts_loop <- p_ras[[1]] #loading and division of edge points for loop functionality
-  punts_loop <- st_sf(geometry = st_sfc(punts_loop)) #conversion of array to sf
-  punts_loop <- st_cast(punts_loop, "POINT")
-  
-  #Application of the cost function (creation of the cost surface layer from package "leastcostpath")
-  mde_base <- create_slope_cs(elevacio, cost_function = w, neighbours = 16, exaggeration = FALSE) #cost calculation
-  
-  print("Step 1 completed") 
-  
-  #Computation of LCPs for natural corridors
-  
-  #Setting up number of movements
-  m <- q/q2
-  
-  #Selecting point for loop of movement
-  
-  for (p in 1:m) { 
-    
-    time_taken <- system.time({ 
-      #Identifying rows of the points, subsisting and sf conversion
-      maxm <- seq(from=1*p,to=nrow(punts_loop),by=m) #identifying rows
-      punts_loop_mov <- punts_loop[maxm, ] #subletting points
-      
-      #Creation of empty object to store LCPs
-      xarxa_camins_total <- st_sfc(st_linestring(), crs = crs(elevacio)) #creation of line string sfc object
-      xarxa_camins_total <- st_sf(geometry = xarxa_camins_total) #creation of line string sf object
-      xarxa_camins_total <- xarxa_camins_total[-1, ] #emptying of the line string sf object
-      
-      #Loop for LCP calculation
-      for (i in 1:nrow(punts_loop_mov)) {
-        
-        #Recovery of coordinates of origin point
-        punt_objectiu <- punts_loop_mov[i, ]
-        
-        #Recovery of the destination points
-        punts_desti <- punts_loop_mov[-i, ]
-        
-        #LCPs calculation 
-        xarxa_camins <- create_lcp(mde_base, punt_objectiu, punts_desti, cost_distance = FALSE) #lcps calcultaion
-        xarxa_camins <- st_set_crs(xarxa_camins,crs(elevacio)) #seting crs
-        
-        #Sumation of all LCPs without attributes
-        xarxa_camins_total <- rbind(xarxa_camins_total, xarxa_camins[ , -c(1,2,3,4)])
-        
-        rm(xarxa_camins) #saving memory
-        gc()
-      }
-      
-      #Saving of the LCPs to Shapefile
-      nom_arxiu <- paste(substitute(y),as.character(q),substitute(w),"posicio",as.character(p),"xarxa_camins_total.gpkg", sep = "_") #File name creation
-      xarxa_camins_total <- xarxa_camins_total[!st_is_empty(xarxa_camins_total), ] #dilter of empty geometries
-      st_write(xarxa_camins_total, dsn = file.path(dir,nom_arxiu)) #Saving of LCPs object from sf object to Shapefile
-      rm(xarxa_camins_total) #erasing the data frame where the paths are stored
-      
-    })
-    
-    print(paste("final model",as.character(p)))
-    
-    # Store the user time
-    time_results <<- rbind(time_results, data.frame(time_in_seconds = time_taken["elapsed"]))
-    
-    # Set the row name as the current value of p
-    rownames(time_results)[nrow(time_results)] <<- as.character(p)
-    
-  }
-  
-  print("Process ended succesfully")
-  
-}
+sessionInfo()
 
+# 1 Setting up needed functions #################################################
+
+#Analysis functions
 Kernel_function <- function(x,y,dir) { 
   
   #Creating the folder to store the rasters
@@ -212,7 +76,7 @@ Kernel_function <- function(x,y,dir) {
       eps = 1 # cell size
     )
   }
-
+  
   # Application of the function
   lcp_kernel_data <- lcp_kernel(lcps_reduced)
   
@@ -511,6 +375,167 @@ Evaluation_function <- function(x,n,y,dir) {
   
 }
 
+#1 and 2 experimental steps
+Edge_model <- function(y,q,w,dir) { 
+  
+  #Creating the folder to store the shapes of the models
+  dir.create(dir)
+  
+  #Loading of the input DEM or "y"
+  elevacio <- y #raster for points
+  res_rast <- ext(elevacio)
+  
+  #Creation of the limit edge points
+  
+  #Creation of the raster's polygon
+  ext_red <- c(res_rast[1]+1,res_rast[2]-1,res_rast[3]+1,res_rast[4]-1)
+  elevacio_pol <- crop(elevacio, ext_red)
+  pol_ras <- st_union(st_as_sf(as.polygons(elevacio_pol, dissolve = TRUE)))
+  
+  #Converting raster's polygon to edge points
+  mpol_ras <- st_cast(pol_ras, to = "POLYGON") #multipolygon to polygon 
+  pol_line <- st_cast(mpol_ras, to = "LINESTRING") #polygon to line 
+  densitat <- 1 / q #calculation of point density depending on q
+  p_ras <- st_line_sample(pol_line, density = densitat) #line to points depending of density of q
+  punts_loop <- p_ras[[1]] #loading and division of edge points for loop functionality
+  punts_loop <- st_sf(geometry = st_sfc(punts_loop)) #conversion of array to sf
+  punts_loop <- st_cast(punts_loop, "POINT")
+  
+  #Application of the cost function (creation of the cost surface layer from package "leastcostpath")
+  mde_base <- create_slope_cs(elevacio, cost_function = w, neighbours = 16, exaggeration = FALSE) #cost calculation
+  
+  print("Step 1 completed") 
+  
+  
+  #Computation of LCPs for natural corridors
+  
+  #Creation of empty object to store LCPs
+  xarxa_camins_total <- st_sfc(st_linestring(), crs = crs(elevacio)) #creation of line string sfc object
+  xarxa_camins_total <- st_sf(geometry = xarxa_camins_total) #creation of line string sf object
+  xarxa_camins_total <- xarxa_camins_total[-1, ] #emptying of the line string sf object
+  
+  #Creation of LCPs 
+  
+  #Loop for LCP calculation
+  for (i in 1:nrow(punts_loop)) {
+    
+    #Recovery of coordinates of origin point
+    punt_objectiu <- punts_loop[i, ]
+    
+    #Recovery of the destination point
+    punts_desti <- punts_loop[-i, ]
+    
+    #LCPs calculation 
+    xarxa_camins <- create_lcp(mde_base, punt_objectiu, punts_desti, cost_distance = FALSE) #lcps calcultaion
+    xarxa_camins <- st_set_crs(xarxa_camins,crs(elevacio)) #seting crs
+    
+    #Sumation of all LCPs without attributes
+    xarxa_camins_total <- rbind(xarxa_camins_total, xarxa_camins[ , -c(1,2,3,4)])
+    
+    rm(xarxa_camins) #saving memory
+    
+  }
+  
+  print("Step 2 completed") 
+  
+  #Saving of the LCPs to Shapefile
+  nom_arxiu <- paste(substitute(y),as.character(q),substitute(w),"xarxa_camins_total.gpkg") #File name creation
+  xarxa_camins_total <- xarxa_camins_total[!st_is_empty(xarxa_camins_total), ] #filter of empty geometries
+  st_write(xarxa_camins_total, dsn = file.path(dir,nom_arxiu)) #Saving of LCPs object from sf object to GPKG
+  
+  print("Process ended succesfully")
+}
+Edge_rotate_model <- function(y,q,q2,w,dir) { 
+  
+  #Creating the folder to store the shapes of the models
+  dir.create(dir)
+  
+  #Loading of the input DEM or "y" 
+  elevacio <- y
+  res_rast <- ext(elevacio)
+  
+  #Creation of the limit edge points
+  
+  #Creation of the raster's polygon
+  ext_red <- c(res_rast[1]+1,res_rast[2]-1,res_rast[3]+1,res_rast[4]-1)
+  elevacio_pol <- crop(elevacio, ext_red)
+  pol_ras <- st_union(st_as_sf(as.polygons(elevacio_pol, dissolve = TRUE)))
+  
+  #Converting raster's polygon to edge points
+  pol_line <- st_cast(pol_ras, to = "LINESTRING") #polygon to line 
+  densitat <- 1 / q2 #calculation of point density depending on q2
+  p_ras <- st_line_sample(pol_line, density = densitat) #line to points depending of density of q
+  punts_loop <- p_ras[[1]] #loading and division of edge points for loop functionality
+  punts_loop <- st_sf(geometry = st_sfc(punts_loop)) #conversion of array to sf
+  punts_loop <- st_cast(punts_loop, "POINT")
+  
+  #Application of the cost function (creation of the cost surface layer from package "leastcostpath")
+  mde_base <- create_slope_cs(elevacio, cost_function = w, neighbours = 16, exaggeration = FALSE) #cost calculation
+  
+  print("Step 1 completed") 
+  
+  #Computation of LCPs for natural corridors
+  
+  #Setting up number of movements
+  m <- q/q2
+  
+  #Selecting point for loop of movement
+  
+  for (p in 1:m) { 
+    
+    time_taken <- system.time({ 
+      #Identifying rows of the points, subsisting and sf conversion
+      maxm <- seq(from=1*p,to=nrow(punts_loop),by=m) #identifying rows
+      punts_loop_mov <- punts_loop[maxm, ] #subletting points
+      
+      #Creation of empty object to store LCPs
+      xarxa_camins_total <- st_sfc(st_linestring(), crs = crs(elevacio)) #creation of line string sfc object
+      xarxa_camins_total <- st_sf(geometry = xarxa_camins_total) #creation of line string sf object
+      xarxa_camins_total <- xarxa_camins_total[-1, ] #emptying of the line string sf object
+      
+      #Loop for LCP calculation
+      for (i in 1:nrow(punts_loop_mov)) {
+        
+        #Recovery of coordinates of origin point
+        punt_objectiu <- punts_loop_mov[i, ]
+        
+        #Recovery of the destination points
+        punts_desti <- punts_loop_mov[-i, ]
+        
+        #LCPs calculation 
+        xarxa_camins <- create_lcp(mde_base, punt_objectiu, punts_desti, cost_distance = FALSE) #lcps calcultaion
+        xarxa_camins <- st_set_crs(xarxa_camins,crs(elevacio)) #seting crs
+        
+        #Sumation of all LCPs without attributes
+        xarxa_camins_total <- rbind(xarxa_camins_total, xarxa_camins[ , -c(1,2,3,4)])
+        
+        rm(xarxa_camins) #saving memory
+        gc()
+      }
+      
+      #Saving of the LCPs to Shapefile
+      nom_arxiu <- paste(substitute(y),as.character(q),substitute(w),"posicio",as.character(p),"xarxa_camins_total.gpkg", sep = "_") #File name creation
+      xarxa_camins_total <- xarxa_camins_total[!st_is_empty(xarxa_camins_total), ] #dilter of empty geometries
+      st_write(xarxa_camins_total, dsn = file.path(dir,nom_arxiu)) #Saving of LCPs object from sf object to Shapefile
+      rm(xarxa_camins_total) #erasing the data frame where the paths are stored
+      
+    })
+    
+    print(paste("final model",as.character(p)))
+    
+    # Store the user time
+    time_results <<- rbind(time_results, data.frame(time_in_seconds = time_taken["elapsed"]))
+    
+    # Set the row name as the current value of p
+    rownames(time_results)[nrow(time_results)] <<- as.character(p)
+    
+  }
+  
+  print("Process ended succesfully")
+  
+}
+
+#3 experimental step
 FETE_model <- function(y,q,w,dir) { 
   
   #Creating the folder to store the shapes of the models
@@ -659,6 +684,7 @@ FETE_vs_Edge_function <- function(x,x2,n,y,dir) {
   
 }
 
+#Real world function
 Real_world_function <- function(y,y2,q,z,z2,w,dir) {
   
   #Creating the folders to store the results
@@ -685,7 +711,7 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
       x = lcps_pts_pp,
       sigma = 20 * res(elevacio)[1], 
       kernel = "gaussian",
-      eps = 25 # cell size
+      eps = res(elevacio)[1] # cell size
     )
   }
   
@@ -750,7 +776,15 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
   
   print("Step 1 completed")
   
-  # Read all rasters
+  ##Read all rasters
+  #Function to control the time
+  cli_progress_bar(
+    format = "Processing rasters {.val {r}} {cli::pb_bar} {cli::pb_percent} [{cli::pb_current}/{cli::pb_total}] | ETA: {cli::pb_eta}",
+    total = length(blocks),
+    clear = FALSE
+  )
+  
+  #Main loop
   for(r in seq_along(blocks)) {
     
     # Loading the raster's block
@@ -763,12 +797,13 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     polygons_ras_fil_sf <- st_as_sf(aggregate(polygons_ras_fil))
     
     #Creating buffer for paths creation and points locations
-    buff_52 <- st_buffer(polygons_ras_fil_sf, 102 * res(elevacio)[1]) # for paths creation
-    buff_50 <- st_buffer(polygons_ras_fil_sf, 100 * res(elevacio)[1]) #for points locations
-    buff_ol <- st_buffer(polygons_ras_fil_sf, 50 * res(elevacio)[1]) #for points locations
+    buff_52 <- st_buffer(polygons_ras_fil_sf, 152 * res(elevacio)[1]) # for paths creation
+    buff_50 <- st_buffer(polygons_ras_fil_sf, 150 * res(elevacio)[1]) # for points locations
+    buff_ol <- st_buffer(polygons_ras_fil_sf, 50 * res(elevacio)[1]) # for overlapping blocks
     
     #Setting up the raster for path creation
     elevacio_r_52 <- crop(elevacio_back, buff_52)
+    elevacio_r_52 <- extend(elevacio_r_52, ext(buff_52)) #extend rasters extend to ensure point placing inside raster
     elevacio_r_52 <- ifel(is.na(elevacio_r_52), 0, elevacio_r_52)
     
     #Setting up points
@@ -786,7 +821,7 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     mde_base <- create_slope_cs(elevacio_r_52, cost_function = w, neighbours = 16, exaggeration = FALSE)
     
     #Creation of rivers' buffers based on "z"
-    rius_r <- st_intersection(rius,polygons_ras_fil_sf)
+    rius_r <- st_intersection(rius,buff_52)
     buff_rius <- st_buffer(rius_r, dist = 50) #buffer creation
     
     #Computing of the rivers' buffers cost multipliers 
@@ -797,6 +832,8 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     
     rm(rius_r)
     rm(buff_rius)
+    
+    gc()
     
     #Extra slope cost multipliers calculation
     
@@ -822,6 +859,8 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     rm(pendent_60)
     rm(pendent100_pol)
     rm(pendent60_pol)
+    
+    gc()
     
     #Extra cost for wetlands
     # Logical condition: where both altitud < 5 and pendent < 5
@@ -855,7 +894,6 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
       
       punts_desti <- punts_loop[-i, ]
       
-      
       #LCPs calculation 
       xarxa_camins <- create_lcp(mde_base, punt_objectiu, punts_desti, cost_distance = FALSE) #lcps calcultaion
       xarxa_camins <- st_set_crs(xarxa_camins,crs(elevacio)) #seting crs
@@ -864,6 +902,8 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
       xarxa_camins_total <- rbind(xarxa_camins_total, xarxa_camins[ , -c(1,2,3,4)])
       
       rm(xarxa_camins) #saving memory
+      
+      gc()
       
     }
     
@@ -893,7 +933,7 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     # convert it to a terra raster
     lcps_density_rast <- stars::st_as_stars(
       lcp_kernel_data) |> 
-      sf::st_set_crs(25831) |>
+      sf::st_set_crs(st_crs(z)) |>
       terra::rast()
     
     # Save
@@ -910,9 +950,10 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     rm(polygons_ras_fil_sf)
     rm(polygons_ras_fil)
     
+    gc()
     
     print(paste("Process ended succesfully in raster", substitute(r)))
-    
+    cli_progress_update()
   }
   
   # Normalize values of all the area #
@@ -944,6 +985,8 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     
     k_rast <- rast_list[[k]]
     
+    nom_rast <- paste0("block_", as.character(k))
+    
     min_val <- min(min_vals)
     max_val <- max(max_vals)
     
@@ -952,7 +995,8 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
     terra::writeRaster(k_rast,filename = file.path(dir,"RASTERS",paste(as.character(k),"KDE_raster_norm.tiff"))) # Saving results
     
     rm(k_rast) 
-    rm(vec_val) 
+    
+    gc()
     
   }
   
@@ -961,15 +1005,26 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
   
   # Read all rasters
   rast_list_norm <- lapply(llista_rast_norm, terra::rast)
-  rast_list_norm <- sprc(rast_list_norm)
+  
+  #Set reference resolution for correct mosaic creation
+  target_res <- round(mean(sapply(rast_list_norm, function(r) res(r)[1])), 3)
+  ref <- rast_list_norm[[1]]
+  res(ref) <- c(target_res, target_res)
+  
+  #Set all the same resolution
+  rast_list_fixed <- lapply(rast_list_norm, function(r) {
+    tmp <- r
+    res(tmp) <- c(target_res, target_res)
+    resample(r, tmp, method = "bilinear")
+  })
   
   # Build the mosaic
-  mosaic_rast <- mosaic(rast_list_norm, fun = mean)
+  rast_list_fixed <- sprc(rast_list_fixed) #convert to collection
+  mosaic_rast <- mosaic(rast_list_fixed, fun = mean)  # Mosaic using mean function
   
-  # Smooth borders between blocks
+  #Smotthing results
   mosaic_rast <- focal(mosaic_rast, w = matrix(1, nrow = 51, ncol = 51), fun = mean, na.policy = "omit")
   
-  # Scaling results between 0 and 1
   min_val_v <- minmax(mosaic_rast)[1]
   max_val_v <- minmax(mosaic_rast)[2]
   
@@ -982,9 +1037,9 @@ Real_world_function <- function(y,y2,q,z,z2,w,dir) {
   
 }
 
-### Quantity series ###
-
-# ---- Raster_A  ----
+# 2 Experimental analysis ######################################################
+# 2.1 Quantity series ##########################################################
+# 2.1.1 Raster_A  ==============================================================
 
 # Creation of the folder to store the models
 dir.create("Quantity series")
@@ -1028,7 +1083,7 @@ Evaluation_function("Quantity series/Raster_a_Q/RASTERS", 9, raster_a,"Quantity 
 
 rm(time_results)
 
-# ---- Raster_B  ----
+# 2.1.2 Raster_B  ==============================================================
 
 raster_b <- rast("Data/Rasters/Raster_B.tif")
 crs(raster_b)<- "EPSG:25831"
@@ -1062,7 +1117,7 @@ Evaluation_function("Quantity series/Raster_b_Q/RASTERS", 9, raster_b,"Quantity 
 
 rm(time_results)
 
-# ---- Raster_C  ----
+# 2.1.3 Raster_C  ==============================================================
 
 raster_c <- rast("Data/Rasters/Raster_C.tif")
 crs(raster_c)<- "EPSG:25831"
@@ -1096,12 +1151,12 @@ Evaluation_function("Quantity series/Raster_c_Q/RASTERS", 9, raster_c,"Quantity 
 
 rm(time_results)
 
-### Spatial series ###
+# 2.2 Spatial series ###########################################################
 
 # Creation of the folder to store the models
 dir.create("Spatial series")
 
-# ---- Raster_A_A  ----
+# 2.2.1 Raster_A_A  ============================================================
 
 dir.create("Spatial series/Raster_a_S_a")
 
@@ -1122,7 +1177,7 @@ Evaluation_function("Spatial series/Raster_a_S_a/RASTERS", 9, raster_a,"Spatial 
 
 rm(time_results)
 
-# ---- Raster_A_B  ----
+# 2.2.2 Raster_A_B  ============================================================
 
 dir.create("Spatial series/Raster_a_S_b")
 
@@ -1142,7 +1197,7 @@ Evaluation_function("Spatial series/Raster_a_S_b/RASTERS", 9, raster_a,"Spatial 
 
 rm(time_results)
 
-# ---- Raster_A_C  ----
+# 2.2.3 Raster_A_C  ============================================================
 
 dir.create("Spatial series/Raster_a_S_c")
 
@@ -1162,12 +1217,12 @@ Evaluation_function("Spatial series/Raster_a_S_c/RASTERS", 9, raster_a,"Spatial 
 
 rm(time_results)
 
-### FETE vs Edge series ###
+# 3 FETE vs Edge series ########################################################
 
 # Creation of the folder to store the models
 dir.create("Edge vs FETE")
 
-# ---- Edge_1,6_km  ----
+# 2.3.1 Edge_1,6_km  =============================================================
 raster_un_sis <- rast("Data/Rasters/Raster_un_sis_km.tif")
 crs(raster_un_sis)<- "EPSG:25831"
 
@@ -1183,7 +1238,7 @@ for (i in llista_shp) {
   
 }
 
-# ---- Edge_2_km  ----
+# 2.3.2 Edge_2_km  ===============================================================
 
 raster_dos <- rast("Data/Rasters/Raster_dos_km.tif")
 crs(raster_dos)<- "EPSG:25831"
@@ -1200,7 +1255,7 @@ for (i in llista_shp) {
   
 }
 
-# ---- FETE_1_km  ----
+# 2.3.3 FETE_1_km  ===============================================================
 
 dir.create("Edge vs FETE/FETE_un_km")
 
@@ -1221,7 +1276,7 @@ x2 <- rast("Edge vs FETE/FETE_un_km/RASTERS/raster_a 200 tobler xarxa_camins_tot
 # Function to comparison and graphics creation
 FETE_vs_Edge_function(x,x2,9, raster_a,"FETE_un_km")
 
-# ---- FETE_1,6_km  ----
+# 2.3.4 FETE_1,6_km  ============================================================
 
 dir.create("Edge vs FETE/FETE_un_sis_km")
 
@@ -1240,7 +1295,7 @@ x2 <- rast("Edge vs FETE/FETE_un_sis_km/RASTERS/raster_un_sis_km 200 tobler xarx
 
 FETE_vs_Edge_function(x,x2,9, raster_un_sis,"FETE_un_sis_km")
 
-# ---- FETE_2_km  ----
+# 2.3.5 FETE_2_km  ==============================================================
 
 dir.create("Edge vs FETE/FETE_dos_km")
 
@@ -1259,11 +1314,11 @@ x2 <- rast("Edge vs FETE/FETE_dos_km/RASTERS/raster_dos 200 tobler xarxa_camins_
 
 FETE_vs_Edge_function(x,x2,9, raster_dos,"FETE_dos_km")
 
-# ---- Real world case ----
+# 3 Real world case ######################################################
 
 # Loading of the rasters and shapes necessary for the modelling
 girona <- rast("Data/Rasters/girona.tif") # Raster of the case of study
-girona_bg <- rast("Data/Rasters/girona_background.tif") # Background raster for overlapping areas
+girona_bg <- rast("Data/Rasters/girona_background.tiff") # Background raster for overlapping areas
 rius <- st_read("Data/Vectors/cat_ETRS89_31N_modificat.shp") # Shapes of the rivers for cost barriers
 costa <- st_read("Data/Vectors/costa_girona_ETRS.shp") # Shapes of the cosatlines
 
@@ -1369,7 +1424,7 @@ corrplot.mixed(cor_test,lower.col = "black", number.cex = 0.35, tl.pos="lt", tl.
 dev.off()
 
 
-# ---- Supplementary: Raster_A_D  ----
+# Supplementary: Raster_A_D ####################################################
 
 dir.create("Spatial series_supp")
 
@@ -1392,7 +1447,7 @@ Evaluation_function("Spatial series_supp/Raster_a_S_d/RASTERS", 9, raster_a,"Spa
 
 rm(time_results)
 
-# ---- Supplementary: Raster_A_E  ----
+# Supplementary: Raster_A_E  ###################################################
 
 dir.create("Spatial series_supp/Raster_a_S_e")
 
@@ -1412,7 +1467,7 @@ Evaluation_function("Spatial series_supp/Raster_a_S_e/RASTERS", 9, raster_a,"Spa
 
 rm(time_results)
 
-# ---- Supplementary: Raster_A_F  ----
+# Supplementary: Raster_A_F  ###################################################
 
 dir.create("Spatial series_supp/Raster_a_S_f")
 
