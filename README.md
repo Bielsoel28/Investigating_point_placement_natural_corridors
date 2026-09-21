@@ -24,7 +24,7 @@ The repository folder is structured as follows:
     - **Raster_a, Raster_b, Raster_c, Raster_dos_km & Raster_un_sis_kim**: All the experimental rasters created for the paper. The first three
     are intended for the first two steps of the experimental approach and the last two, altogether with Raster_a, for the last step.
     - **girona & girona_background**: The two needed rasters for the real world case of study of the paper. 
-    Reprojected from the GLO-30 Copernicus (https://ec.europa.eu/eurostat/web/gisco/geodata/digital-elevation-model/copernicus#Elevation, 
+    Reprojected from the EU-DEM (https://ec.europa.eu/eurostat/web/gisco/geodata/digital-elevation-model/eu-dem, 
     last accessed on 9/1/2026).
   - **Vectors/**: All the nescessary vectors for the paper, including rivers, coast and sites.
     - **cat_ETRS89_31_N_modificat**: Shapefile (.shp and others) with the rivers used for the cost calculations in this paper. Note that some of them have
